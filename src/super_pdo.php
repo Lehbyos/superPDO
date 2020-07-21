@@ -7,14 +7,17 @@ include_once __DIR__ . '/exceptions/no_single_row.php';
 use superPDO\exceptions;
 
 /**
- * Clase base para objetos encargadados de tener acceso a datos.
- * Permite definir una API común para todos los objetos de este tipo.
- * Compatible con PHP 7+
+ * Wrapper class to PDO, adding some utility methods useful in common CRUD operations.
+ * Being an PDO extension, this class is database agnostic too.
+ * Compatible with PHP 7+
+ * @author Alejandro Sandoval Véjar.
  */
 class SuperPDO extends \PDO{
-	/**
-	 * Constructor.
-	 * Inicialización común.
+    /**
+	 * Constructor
+     * @param string $dsn DSN connection string (like PDO).
+     * @param string $username Database name user, if needed.
+     * @param string $password User password, if needed.
 	 */
     public function __construct(string $dsn, string $username = null, string $password = null){
         parent::__construct($dsn, $username, $password);
@@ -22,12 +25,12 @@ class SuperPDO extends \PDO{
     }
 
 	/**
-	 * Gestiona error en una sentencia.
-	 * Se encarga de obtener datos de error cuando se ha confirmado que la ejecución de una sentencia falló.
-	 * Recibe el statement por referencia, ya que realiza algunas operaciones sobre el mismo.
-	 * @param mixed $stmt Sentencia a la cual falló su ejecución.
+	 * Common handler of execution errors on statements.
+	 * Get some information about the error when statement execution fail.
+	 * @param mixed $stmt Statement with failed execution
+     * @throws \Exception In every case. The exception message is the error message obtained from the database.
 	 */ 
-    public function error(\PDOStatement &$stmt){
+    private function error(\PDOStatement &$stmt){
         $err = $stmt->errorInfo();
         $stmt->closeCursor();
 		unset($stmt);
@@ -35,10 +38,10 @@ class SuperPDO extends \PDO{
     }
 
     /**
-     * Crea un statement para una instrucción SQL.
-     * @param string $sql Sentencia SQL a preparar.
-     * @param array $params parámetros para la sentencia SQL.
-     * @return PDOStatement Objeto preparado para ejecución de sentencia.
+     * Creates an statement to execute.
+     * @param string $sql SQL sentence to prepare.
+     * @param array $params Parameters required to the statement. Array, in name=>value form, designed as input parameters.
+     * @return \PDOStatement Statement prepared to execution.
      */
     public function createStatement(string $sql, array $params = null): \PDOStatement {
         $stmt = $this->prepare($sql);
@@ -51,11 +54,13 @@ class SuperPDO extends \PDO{
     }
 
     /**
-	 * Obtener valor único de una consulta.
-	 * Se utiliza para consultas que obtienen un único valor, tales como count(), sum(), max(), etc.
-	 * @param string $sql     Consulta a ejecutar.
-	 * @param array  $params  Parámetros de la consulta (opcionales)
-	 * @return mixed Valor de la consulta.
+	 * Get an scalar value from a query.
+	 * Method providing an easy way to make queries to count(), sum(), max() and also when the query just return a single value.
+     * This method also free the used resources required to execution.
+	 * @param string $sql     Query to execute.
+	 * @param array  $params  Optional parameters to the query.
+	 * @return mixed The value of the query.
+     * @throws NoDataFoundException When query does not return any data
 	 */
     public function scalarQuery(string $sql, array $params = null){
         $stmt = $this->createStatement($sql, $params);
@@ -74,20 +79,20 @@ class SuperPDO extends \PDO{
     }
 
     /**
-     * Realiza una consulta a la base de datos.
-     * Cada fila/registro es obtenida como un objeto.
-     * @param string $sql Sentencia SQL a ejecutar (select)
-     * @param array $params Parámetros (opcionales) de la sentencia SQL.
-     * @return array Arreglo de filas (convertidas en objeto) obtenidas de la sentencia.
+     * Execute a query.
+     * Every row/tuple is converted to an object, when every column name becomes an object attribute/field.
+     * @param string $sql SQL Query (usually, a select-like sentence)
+     * @param array $params Parameters to the SQL Sentence.
+     * @return array Results of the execution (every row is converted to an object)
      */
     public function customQuery(string $sql, array $params = null): array{
         $stmt = $this->createStatement($sql, $params);
         if (!$stmt->execute())
             $this->error($stmt);
         $resp = array();
-        $stmt->setFetchMode(\PDO::FETCH_OBJ); //PDO_FETCH_OBJ en PHP < 5.1
-        while($registro = $stmt->fetch()){            
-            $resp[] = $registro;
+        $stmt->setFetchMode(\PDO::FETCH_OBJ);
+        while($row = $stmt->fetch()){            
+            $resp[] = $row;
         }
         $stmt->closeCursor();
 		unset($stmt);
@@ -95,12 +100,12 @@ class SuperPDO extends \PDO{
     }
 
     /**
-     * Devuelve una fila de datos desde la sentencia indicada.
-     * Se espera que sentencia retorne al menos una fila de datos, la cual será devuelta
-     * convertida en objeto. Si no hay data, se genera excepción NoDataFoundException.
-     * @param string $sql Sentencia SQL a ejecutar.
-     * @param array $params Parámetros (opcionales) de la sentencia
-     * @return Fila de datos obtenida desde BD, <code>null</code> si no hay datos.
+     * Gets a single row of an SQL statement.
+     * The row/tuple is converted to an object, when every column is converted to an object field/attribute.
+     * If the query gets more than one row, just the first one is used.
+     * @param string $sql SQL Query to execute.
+     * @param array $params Parameters required by the query (if any)
+     * @return object The data row/tuple converted to an object, <code>null</code> if query does not return data.
      */
     public function singleRowQuery(string $sql, array $params = null){
         $stmt = $this->createStatement($sql, $params);
@@ -120,12 +125,12 @@ class SuperPDO extends \PDO{
     }
 
     /**
-     * Devuelve la única fila de datos que debiera obtenerse de una sentencia SQL.
-     * De haber más de una, se genera excepción NoSingleRowException
-     * @param string $sql Sentencia SQL a ejecutar para obtener dato.
-     * @param array $params Parámetros (opcionales) de la sentencia SQL.
-     * @return Objeto representando la fila de datos, <code>null</code> si no hay datos.
-     * @throws NoSingleRowException Si sentencia retorna más de una fila de datos.
+     * Gets the <i>unique</i> result row of a query converted to an object.
+     * An Exception will be thrown if the query returns more than a single data row.
+     * @param string $sql SQL query.
+     * @param array $params Parameters required by query (if any)
+     * @return object Object representation of the row/tuple, <code>null</code> if query gets no data.
+     * @throws NoSingleRowException When query return more than ONE row
      */
     public function uniqueRowQuery(string $sql, array $params = null) : object {
         $stmt = $this->createStatement($sql, $params);
@@ -150,14 +155,13 @@ class SuperPDO extends \PDO{
     }
     
     /**
-     * Realiza ejecución típica para sentencias Insert, Update o Delete.
-     * Básicamente, se trata de ejecutar la sentencia y verificar si sólo una fila se ve afectada,
-     * manejando además cualquier error que pudiera derivarse de la ejecución de la sentencia.
-     * @param PDOStatement $stmt Sentencia a ejecutar
-     * @return <code>true</code> si sólo una fila se vio afectada por sentencia SQL, <code>false</code> en caso contrario.
+     * Execute an SQL statement that does not return data rows, like <i>insert</i>, <i>update</i>, <i>delete</i>.
+     * @param string $sql    SQL sentence to execute.
+     * @param array  $params Parameters to the SQL sentence (if any) 
+     * @return int Affected number of rows.
      */
-    public function executeStatement(string $query, array $params = null) : int{
-        $stmt = $this->createStatement($query, $params);
+    public function executeStatement(string $sql, array $params = null) : int{
+        $stmt = $this->createStatement($sql, $params);
         $resp = $stmt->execute();
         if ($resp === false)
             $this->error($stmt);

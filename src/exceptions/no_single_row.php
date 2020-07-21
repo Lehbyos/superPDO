@@ -2,12 +2,12 @@
 namespace superPDO\exceptions;
 
 /**
- * Excepción generada cuando, para una consulta de fila única, se encuentra más de una.
+ * Default exception generated when a single row query return two or more rows.
  */
 class NoSingleRowException extends \Exception {
     public function __construct(string $message = null){
         if ($message === null)
-            $message = 'Consulta devuelve más de una fila, se esperaba único resultado';
+            $message = 'Query returns many rows, just one was expected';
         parent::__construct($message);
     }
 }
