@@ -55,7 +55,7 @@ class SuperPDO extends \PDO{
 
     /**
 	 * Get an scalar value from a query.
-	 * Method providing an easy way to make queries to count(), sum(), max() and also when the query just return a single value.
+	 * Method providing an easy way to make queries like count(), sum(), max() and also when the query just return a single value.
      * This method also free the used resources required to execution.
 	 * @param string $sql     Query to execute.
 	 * @param array  $params  Optional parameters to the query.
@@ -74,8 +74,10 @@ class SuperPDO extends \PDO{
         }
 
         $stmt->closeCursor();
-		unset($stmt);
-        return $row[0];
+        $resp = $row[0];
+        unset($stmt);
+        unset($row);
+        return $resp;
     }
 
     /**
@@ -90,8 +92,8 @@ class SuperPDO extends \PDO{
         if (!$stmt->execute())
             $this->error($stmt);
         $resp = array();
-        $stmt->setFetchMode(\PDO::FETCH_OBJ);
-        while($row = $stmt->fetch()){            
+        //$stmt->setFetchMode(\PDO::FETCH_OBJ);
+        while($row = $stmt->fetchObject()){            
             $resp[] = $row;
         }
         $stmt->closeCursor();
@@ -113,8 +115,7 @@ class SuperPDO extends \PDO{
         if (!$stmt->execute())
             $this->error($stmt);
 
-        $stmt->setFetchMode(\PDO::FETCH_OBJ);
-        $resp = $stmt->fetch();
+        $resp = $stmt->fetchObject();
         $stmt->closeCursor();
         unset($stmt);
 
@@ -138,8 +139,7 @@ class SuperPDO extends \PDO{
         if (!$stmt->execute())
             $this->error($stmt);
 
-        $stmt->setFetchMode(\PDO::FETCH_OBJ);
-        $resp = $stmt->fetch();
+        $resp = $stmt->fetchObject();
         $aux = false;
         if ($resp !== false){
             $aux = $stmt->fetch();
