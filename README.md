@@ -16,8 +16,7 @@ if (!$stmt->execute()){
   //handle the error, free resources  
 }
 $data = array();
-$stmt->setFetchMode(PDO::FETCH_OBJ);
-while($obj = $stmt->fetch()){
+while($obj = $stmt->fetchObject()){
   $resp[] = $obj;
 }
 $stmt->closeCursor();
