@@ -4,7 +4,10 @@ Wrapper class to PDO, with helper methods to common task in CRUD operations
 ## General porpuse
 This class provides a very thin layer over PDO, giving some helpful methods to manipulate data.
 
+
 ### Getting data
+
+#### Multiple rows
 It's a very common scenario to perform the next steps to get some data from PDO:
 
 ~~~
@@ -31,8 +34,8 @@ With superPDO, all the code above can be rewritten as
 ~~~
 //$conn now is a superPDO instance; note that superPDO extends PDO.
 try{
-  $data = $conn->customQuery(
-    'select  from some_table where some_field = :value and other_field = :other_value',
+  $data = $conn->selectQuery(
+    'select * from some_table where some_field = :value and other_field = :other_value',
     [':value' => $value1, ':other_value' => $value2] 
   );
 }
@@ -42,6 +45,45 @@ catch(Exception $e){
 ~~~
 
 As you can see, the last code is cleaner and shorter than the first one.
+
+The parameters could also be positional (not named), witch generate even shorter code.
+~~~
+//$conn now is a superPDO instance; note that superPDO extends PDO.
+try{
+  $data = $conn->selectQuery(
+    'select * from some_table where some_field = ? and other_field = ?',
+    [$value1, $value2] 
+  );
+}
+catch(Exception $e){
+   //handle error; an exception will be throw if the SQL has error or if the execution of the statement fails
+}
+~~~
+
+#### One data row
+
+SuperPDO can get just one data row. 
+~~~
+//$conn now is a superPDO instance; note that superPDO extends PDO.
+try{
+  $usr = $conn->singleRowQuery('select * from users where user_id = ?', [$id]);
+}
+catch(Exception $e){
+   //handle error; an exception will be throw if the SQL has error or if the execution of the statement fails
+}
+~~~
+
+In a very restrictive way, SuperPDO can ensure that a query just create ONE row, throwing and exception if the
+query gives zero or more than one data row.
+~~~
+//$conn now is a superPDO instance; note that superPDO extends PDO.
+try{
+  $usr = $conn->uniqueRowQuery('select * from users where user_creation_date = ?', [$date]);
+}
+catch(Exception $e){
+   //handle error; an exception will be throw if the SQL has error or if the execution of the statement fails
+}
+~~~
 
 
 
