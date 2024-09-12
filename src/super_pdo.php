@@ -9,19 +9,61 @@ use superPDO\exceptions;
 /**
  * Wrapper class to PDO, adding some utility methods useful in common CRUD operations.
  * Being an PDO extension, this class is database agnostic too.
- * Compatible with PHP 7+
+ * Compatible with PHP 8+
  * @author Alejandro Sandoval Véjar.
  */
 class SuperPDO extends \PDO{
+    protected static array $connections = [];
+
+    /**
+     * Add a new connection.
+     * SuperPDO can handle multiple connections, keeping just one instance (singleton) for every connection name.
+     * @param string $name The name/alias of the connection
+     * @param string $dsn The DSN to the connection, as required by PDO.
+     * @param string|null $username Username to log in (if required)
+     * @param string|null $password Password to log in (if required)
+     * @return void
+     * @throws \Exception If a connection with name <tt>name</tt> is already defined.
+     */
+    public static function
+    addConnection(string $name, string $dsn, ?string $username = null, ?string $password = null): void {
+        if (isset(self::$connections[$name]))
+            throw new \Exception("A connection with name $name is already defined");
+
+        self::$connections[$name] = new SuperPDO($dsn, $username, $password);
+    }
+
+    /**
+     * Get the connection with the given name.
+     * @param string $name The connection name. By convention, if no name is specified, <tt>default</tt> will be used.
+     * @return SuperPDO The connection with the given name.
+     * @throws \Exception If there is no connection with name <tt>name</tt>
+     */
+    public static function connection(string $name = "default"): SuperPDO {
+        if (!isset(self::$connections[$name]))
+            throw new \Exception("There is no connection with name " . $name);
+
+        return self::$connections[$name];
+    }
+
+
     /**
 	 * Constructor
      * @param string $dsn DSN connection string (like PDO).
      * @param string $username Database name user, if needed.
      * @param string $password User password, if needed.
 	 */
-    public function __construct(string $dsn, string $username = null, string $password = null){
-        parent::__construct($dsn, $username, $password);
-        $this->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+    protected function __construct(string $dsn, string $username = null, string $password = null){
+        parent::__construct(
+            $dsn,
+            $username,
+            $password,
+            [
+                \PDO::ATTR_EMULATE_PREPARES   => false,
+                \PDO::ATTR_ERRMODE            => \PDO::ERRMODE_EXCEPTION,
+                \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_OBJ
+            ]
+        );
     }
 
 	/**
@@ -29,7 +71,7 @@ class SuperPDO extends \PDO{
 	 * Get some information about the error when statement execution fail.
 	 * @param mixed $stmt Statement with failed execution
      * @throws \Exception In every case. The exception message is the error message obtained from the database.
-	 */ 
+	 */
     private function error(\PDOStatement &$stmt){
         $err = $stmt->errorInfo();
         $stmt->closeCursor();
@@ -38,17 +80,57 @@ class SuperPDO extends \PDO{
     }
 
     /**
+     * Get a prepared an executed query.
+     * This method first prepare the sql statement, execute it, and return it.
+     * @param string $sql SQL to execute
+     * @param array|null $params Params to the SQL. If they are not required, this could be <tt>null</tt> or an
+     * empty array.
+     * @return \PDOStatement The statement prepared, with params binded and executed.
+     * @throws \Exception If the statement cannot be prepared, or an execution error was found
+     */
+    protected function getExecutedStatement(string $sql, ?array $params = null): \PDOStatement{
+        $stmt = $this->createStatement($sql, $params);
+        if (!$stmt->execute())
+            throw new \PDOException("Error executing query: " . $this->error($stmt));
+        return $stmt;
+    }
+
+    /**
      * Creates an statement to execute.
      * @param string $sql SQL sentence to prepare.
-     * @param array $params Parameters required to the statement. Array, in name=>value form, designed as input parameters.
+     * @param array|null $params Parameters required to the statement.
+     * Array, in name=>value form, designed as input parameters is the prefered way (named parameters), but could be
+     * a list of parameters if the SQL uses anonymous (?) parameters.
+     * Also, the <i>type</i> of the parameters is verified: this method can change it to <tt>PDO::PARAM_INT</tt>,
+     * <tt>PDO::PARAM_BOOL</tt> or <tt>PDO::PARAM_STR</tt> automatically.
      * @return \PDOStatement Statement prepared to execution.
      */
-    public function createStatement(string $sql, array $params = null): \PDOStatement {
+    public function createStatement(string $sql, ?array $params = null): \PDOStatement {
         $stmt = $this->prepare($sql);
-        if ($params !== null){
-            foreach($params as $name => $value){
-                $stmt->bindValue($name, $value);
+        if ($params === null || empty($params))
+            return $stmt;
+
+        $numParam = 1;
+        $type = \PDO::PARAM_STR;
+        $realName = null;
+
+        foreach($params as $name => $value){
+            if (is_int($name)){
+                //is not a param name...
+                $realName = $numParam;
+            } else {
+                $realName = $name;
             }
+
+            if (is_int($value))
+                $type = \PDO::PARAM_INT;
+            else if (is_bool($value))
+                $type = \PDO::PARAM_BOOL;
+
+            if (!$stmt->bindValue($realName, $value, $type))
+                throw new \PDOException("Error binding parameter " . $realName);
+
+            $numParam++;
         }
         return $stmt;
     }
@@ -87,14 +169,18 @@ class SuperPDO extends \PDO{
      * @param array $params Parameters to the SQL Sentence.
      * @return array Results of the execution (every row is converted to an object)
      */
-    public function customQuery(string $sql, array $params = null): array{
-        $stmt = $this->createStatement($sql, $params);
-        if (!$stmt->execute())
-            $this->error($stmt);
+    public function selectQuery(string $sql, array $params = null, callable $format = null): array{
+        $stmt = $this->getExecutedStatement($sql, $params);
+
         $resp = array();
-        //$stmt->setFetchMode(\PDO::FETCH_OBJ);
-        while($row = $stmt->fetchObject()){            
-            $resp[] = $row;
+        $formatting = $format !== null;
+
+
+        while($row = $stmt->fetchObject()){
+            if ($formatting)
+                $resp[] = $format($row);
+            else
+                $resp[] = $format($row);
         }
         $stmt->closeCursor();
 		unset($stmt);
@@ -109,18 +195,19 @@ class SuperPDO extends \PDO{
      * @param array $params Parameters required by the query (if any)
      * @return object The data row/tuple converted to an object, <code>null</code> if query does not return data.
      */
-    public function singleRowQuery(string $sql, array $params = null){
-        $stmt = $this->createStatement($sql, $params);
-
-        if (!$stmt->execute())
-            $this->error($stmt);
+    public function singleRowQuery(string $sql, array $params = null, bool $nullFieldsIfNoData = false): ?object{
+        $stmt = $this->getExecutedStatement($sql, $params);
 
         $resp = $stmt->fetchObject();
+        if ($resp === null && $nullFieldsIfNoData){
+            for($i = 0, $maxCols = $stmt->columnCount(); $i < $maxCols; ++$i){
+                $col = $stmt->getColumnMeta($i)["name"];
+                $resp->$col = null;
+            }
+        }
+
         $stmt->closeCursor();
         unset($stmt);
-
-        if ($resp === false)
-            $resp = null;
 
         return $resp;
     }
@@ -133,41 +220,38 @@ class SuperPDO extends \PDO{
      * @return object Object representation of the row/tuple, <code>null</code> if query gets no data.
      * @throws NoSingleRowException When query return more than ONE row
      */
-    public function uniqueRowQuery(string $sql, array $params = null) : object {
-        $stmt = $this->createStatement($sql, $params);
+    public function uniqueRowQuery(string $sql, array $params = null, bool $nullFieldsIfNoData = false) : ?object {
+        $stmt = $this->getExecutedStatement($sql, $params);
 
-        if (!$stmt->execute())
-            $this->error($stmt);
+        if ($stmt->rowCount() > 1)
+            throw new exceptions\NoSingleRowException();
 
         $resp = $stmt->fetchObject();
-        $aux = false;
-        if ($resp !== false){
-            $aux = $stmt->fetch();
-            $stmt->closeCursor();
-            unset($stmt);
-            if ($aux !== false)
-                throw new exceptions\NoSingleRowException();
+        if ($resp === null && $nullFieldsIfNoData){
+            for($i = 0, $maxCols = $stmt->columnCount(); $i < $maxCols; ++$i){
+                $col = $stmt->getColumnMeta($i)["name"];
+                $resp->$col = null;
+            }
         }
-        else
-            $resp = null;
-        
+
+        $stmt->closeCursor();
+        unset($stmt);
+
         return $resp;
     }
-    
+
     /**
      * Execute an SQL statement that does not return data rows, like <i>insert</i>, <i>update</i>, <i>delete</i>.
      * @param string $sql    SQL sentence to execute.
-     * @param array  $params Parameters to the SQL sentence (if any) 
+     * @param array  $params Parameters to the SQL sentence (if any)
      * @return int Affected number of rows.
      */
     public function executeStatement(string $sql, array $params = null) : int{
-        $stmt = $this->createStatement($sql, $params);
-        $resp = $stmt->execute();
-        if ($resp === false)
-            $this->error($stmt);
+        $stmt = $this->getExecutedStatement($sql, $params);
+        $resp = $stmt->rowCount();
         $stmt->closeCursor();
         unset($stmt);
         return $resp;
     }
-    
+
 }
