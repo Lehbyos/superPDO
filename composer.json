@@ -2,7 +2,7 @@
     "name": "lehbyos/super-pdo",
     "description": "Utility class, created as a wrapper to PDO",
     "type": "library",
-    "license": "GPL",
+    "license": "GPL-3.0-or-later",
     "autoload": {
         "psr-4": {
             "Lehbyos\\SuperPdo\\": "src/"
