@@ -1,0 +1,22 @@
+{
+    "name": "lehbyos/super-pdo",
+    "description": "Utility class, created as a wrapper to PDO",
+    "type": "library",
+    "license": "GPL",
+    "autoload": {
+        "psr-4": {
+            "Lehbyos\\SuperPdo\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Alejandro Sandoval Véjar",
+            "email": "jano.sandoval.vejar@gmail.com"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {
+        "php": "^8.3",
+      "ext-pdo": "*"
+    }
+}
