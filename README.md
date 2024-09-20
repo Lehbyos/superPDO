@@ -1,8 +1,32 @@
-# superPDO
+# SuperPDO
 Wrapper class to PDO, with helper methods to common task in CRUD operations
 
-## General porpuse
+## General purpose
 This class provides a very thin layer over PDO, giving some helpful methods to manipulate data.
+
+## Configuration
+SuperPDO has a singleton implementation, and can manage multiple database connections, identifying every one of them
+with a name.
+
+As a convention, SuperPDO asumes that the main connection is called _default_, using that name as a default value.
+
+To add a new connection to SuperPDO, you must use the static addConnection() method.
+~~~
+SuperPDO::addConnection(string $name, string $dsn, ?string $username = null, ?string $password = null)
+~~~
+- **$name** is the name (alias) of the connection.This name must be unique, and SuperPDO will throw an exception if the name
+was already added.
+- **$dsn** is the connection string, as required by PDO.
+- **$username** and **$password** are the login data to the database, if required.
+
+The connections have _lazy initialization_, thus they are created only when required by the connection() method.
+
+~~~
+SuperPDO::connection(string $name = "default"): SuperPDO
+~~~
+
+This is the method to get a connection, with the given name. This call will throw an exception if there is no connection
+with the given name, or if the connection could not be fulfilled.
 
 
 ### Getting data
@@ -32,9 +56,9 @@ On every query, you must to repeat this lines, creating a lot of boilerplate cod
 With superPDO, all the code above can be rewritten as
 
 ~~~
-//$conn now is a superPDO instance; note that superPDO extends PDO.
+//Asumming that SuperPDO only have a connection configured with the name "default"
 try{
-  $data = $conn->selectQuery(
+  $data = SuperPDO::connection()->selectQuery(
     'select * from some_table where some_field = :value and other_field = :other_value',
     [':value' => $value1, ':other_value' => $value2] 
   );
@@ -48,9 +72,8 @@ As you can see, the last code is cleaner and shorter than the first one.
 
 The parameters could also be positional (not named), witch generate even shorter code.
 ~~~
-//$conn now is a superPDO instance; note that superPDO extends PDO.
 try{
-  $data = $conn->selectQuery(
+  $data = SuperPDO::connection()->selectQuery(
     'select * from some_table where some_field = ? and other_field = ?',
     [$value1, $value2] 
   );
@@ -64,9 +87,8 @@ catch(Exception $e){
 
 SuperPDO can get just one data row. 
 ~~~
-//$conn now is a superPDO instance; note that superPDO extends PDO.
 try{
-  $usr = $conn->singleRowQuery('select * from users where user_id = ?', [$id]);
+  $usr = SuperPDO::connection()->singleRowQuery('select * from users where user_id = ?', [$id]);
 }
 catch(Exception $e){
    //handle error; an exception will be throw if the SQL has error or if the execution of the statement fails
@@ -76,9 +98,8 @@ catch(Exception $e){
 In a very restrictive way, SuperPDO can ensure that a query just create ONE row, throwing and exception if the
 query gives zero or more than one data row.
 ~~~
-//$conn now is a superPDO instance; note that superPDO extends PDO.
 try{
-  $usr = $conn->uniqueRowQuery('select * from users where user_creation_date = ?', [$date]);
+  $usr = SuperPDO::connection()->uniqueRowQuery('select * from users where user_creation_date = ?', [$date]);
 }
 catch(Exception $e){
    //handle error; an exception will be throw if the SQL has error or if the execution of the statement fails
@@ -113,9 +134,8 @@ if ($rows !== 1){
 
 The same result can be achieved with superPDO on this way
 ~~~
-//$conn is now a superPDO instance
 try{
-  $rows = $conn->executeStatement(
+  $rows = SuperPDO::connection()->executeStatement(
     'insert into my_table values(:field1, :field2, :field3, :field4, :field5',
     [':field1' => $value1, ':field2' => $value2, ':field3' => $value3, ':field4' => $value4, ':field5' => $value5]
   );

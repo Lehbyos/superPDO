@@ -13,6 +13,13 @@ use superPDO\exceptions;
  * @author Alejandro Sandoval Véjar.
  */
 class SuperPDO extends \PDO{
+    /** @var array Connections configurations. */
+    protected static array $configurations = [];
+
+    /**
+     * @var array Connections created. The connections are created on demand, so we could have a config
+     * but no a connection to a given name/alias.
+     */
     protected static array $connections = [];
 
     /**
@@ -27,22 +34,31 @@ class SuperPDO extends \PDO{
      */
     public static function
     addConnection(string $name, string $dsn, ?string $username = null, ?string $password = null): void {
-        if (isset(self::$connections[$name]))
+        if (isset(self::$configurations[$name]))
             throw new \Exception("A connection with name $name is already defined");
 
-        self::$connections[$name] = new SuperPDO($dsn, $username, $password);
+        self::$configurations[$name] = [$dsn, $username, $password];
     }
 
     /**
      * Get the connection with the given name.
      * @param string $name The connection name. By convention, if no name is specified, <tt>default</tt> will be used.
      * @return SuperPDO The connection with the given name.
-     * @throws \Exception If there is no connection with name <tt>name</tt>
+     * @throws \Exception If there is no connection with name <tt>name</tt>, or if an error occurs trying to connect
+     * with the given configuration for the name/alias.
      */
     public static function connection(string $name = "default"): SuperPDO {
-        if (!isset(self::$connections[$name]))
+        //If a connection with the given name already exists, then return it
+        if (isset(self::$connections[$name]))
+            return self::$connections[$name];
+
+        //We don't have the connection. Have we its config?
+        if (!isset(self::$configurations[$name]))
             throw new \Exception("There is no connection with name " . $name);
 
+        //Don't have the connection, but have its configuration
+        $cfg = self::$configurations[$name];
+        self::$connections[$name] = new SuperPDO($cfg[0], $cfg[1], $cfg[2]);
         return self::$connections[$name];
     }
 
@@ -99,8 +115,8 @@ class SuperPDO extends \PDO{
      * Creates an statement to execute.
      * @param string $sql SQL sentence to prepare.
      * @param array|null $params Parameters required to the statement.
-     * Array, in name=>value form, designed as input parameters is the prefered way (named parameters), but could be
-     * a list of parameters if the SQL uses anonymous (?) parameters.
+     * Array, in name=>value form, designed as input parameters (named parameters), but could be a list of parameters if
+     * the SQL uses anonymous (?) parameters.
      * Also, the <i>type</i> of the parameters is verified: this method can change it to <tt>PDO::PARAM_INT</tt>,
      * <tt>PDO::PARAM_BOOL</tt> or <tt>PDO::PARAM_STR</tt> automatically.
      * @return \PDOStatement Statement prepared to execution.
